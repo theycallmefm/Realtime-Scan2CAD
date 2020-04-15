@@ -7,6 +7,7 @@
 #include "VoxelUtilHashSDF.h"
 #include "DepthCameraUtil.h"
 
+
 #define T_PER_BLOCK 8
 
 texture<float, cudaTextureType2D, cudaReadModeElementType> depthTextureRef;
@@ -643,3 +644,131 @@ extern "C" void garbageCollectFreeCUDA(HashData& hashData, const HashParams& has
 #endif
 }
 
+
+
+//Torch Pass 1: Find minimum and maximum vox grid positions in the frame
+//TODO: Make this with reduction
+__global__ void findMinMaxVoxGridPosKernel(HashData hashData, int3* d_voxDims) {
+
+
+	const HashEntry& entry = hashData.d_hashCompactified[blockIdx.x];
+	uint i = threadIdx.x;	//inside of an SDF block
+	Voxel v = hashData.d_SDFBlocks[entry.ptr + i];
+	if (v.weight > 20) {
+		int3 pos = hashData.SDFBlockToVirtualVoxelPos(entry.pos) + make_int3(hashData.delinearizeVoxelIndex(i));
+		//printf("min.pos: %d,%d,%d entry.pos: %d,%d,%d hashId: %d\n", minPos.x, minPos.y, minPos.z, entry.pos.x, entry.pos.y, entry.pos.z,  hashIdx);
+		//printf("pos %d %d %d\n", pos.x, pos.z, pos.y);
+		int3 & minPos = d_voxDims[0];
+		int3 & maxPos = d_voxDims[1];
+		if (pos.x < minPos.x) {
+			minPos.x = pos.x;
+		}
+		if (pos.y < minPos.y) {
+			minPos.y = pos.y;
+		}
+		if (pos.z < minPos.z) {
+			minPos.z = pos.z;
+		}
+
+		if (pos.x > maxPos.x) {
+			maxPos.x = pos.x;
+		}
+		if (pos.y >	maxPos.y) {
+			maxPos.y = pos.y;
+		}
+		if (pos.z > maxPos.z) {
+			maxPos.z = pos.z;
+		}
+
+		
+	}
+	
+}
+__global__ void fillTensorKernel(float* d_sdf, int n_elems) {
+
+	uint i = threadIdx.x + blockDim.x * blockIdx.x;	//inside of an SDF block
+
+	if (i < n_elems) {
+		d_sdf[i] = -0.15;
+	}
+
+
+}
+//Torch Pass 2: Create sdf
+__global__ void createSDFTensorKernel(HashData hashData, float* d_sdf, int3 minPos, int3 dims) {
+
+	const HashEntry& entry = hashData.d_hashCompactified[blockIdx.x];
+	uint i = threadIdx.x;	//inside of an SDF block
+	uint idx = entry.ptr + i;
+	Voxel v = hashData.d_SDFBlocks[idx];
+	int3 pi = hashData.SDFBlockToVirtualVoxelPos(entry.pos);
+	//printf("pi %d %d %d\n", pi.x, pi.z, pi.y);
+	if (v.weight > 20) {
+		int3 voxelPos = pi + make_int3(hashData.delinearizeVoxelIndex(i))- minPos;
+		
+		int y = voxelPos.y, z = voxelPos.z;
+		voxelPos.y = z, voxelPos.z = y;
+
+		//printf("voxelPos.: %d,%d,%d dims: %d,%d,%d \n", voxelPos.x, voxelPos.y, voxelPos.z, dims.x, dims.y, dims.z);
+		int index = voxelPos.z * dims.y*dims.x+voxelPos.y*dims.x +voxelPos.z ;
+		d_sdf[index] = v.sdf;
+		
+	}
+	//Voxel prev = getVoxel(g_SDFBlocksSDFUAV, g_SDFBlocksRGBWUAV, idx);
+	//Voxel newVoxel = combineVoxel(curr, prev);
+	//setVoxel(g_SDFBlocksSDFUAV, g_SDFBlocksRGBWUAV, idx, newVoxel);
+
+
+
+}
+
+extern "C" float * createSDFTensor(HashData & hashData, const HashParams & hashParams, int* min_pos, int* h_dims) {
+	float* h_sdf;
+	int3* d_voxDims;
+	
+	cutilSafeCall(cudaMalloc(&d_voxDims, sizeof(int3) * 2));
+
+	const unsigned int threadsPerBlock = SDF_BLOCK_SIZE * SDF_BLOCK_SIZE * SDF_BLOCK_SIZE;
+	const dim3 gridSize(hashParams.m_numOccupiedBlocks, 1);
+	const dim3 blockSize(threadsPerBlock, 1);
+
+	if (hashParams.m_numOccupiedBlocks > 0) {
+		findMinMaxVoxGridPosKernel << <gridSize, blockSize >> >(hashData, d_voxDims);
+		int3 voxDims[2];
+
+		cutilSafeCall(cudaMemcpy(&voxDims, d_voxDims, sizeof(int3) * 2, cudaMemcpyDeviceToHost));
+		cutilSafeCall(cudaFree(d_voxDims));
+		// z and y is different in Scan2CAD
+		min_pos[0] = voxDims[0].x, min_pos[1] = voxDims[0].z, min_pos[2] = voxDims[0].y;
+		int3 dims = voxDims[1] - voxDims[0]+make_int3(1);
+		int y = dims.y, z = dims.z;
+		dims.y = z, dims.z = y;
+		int3 pad = make_int3((16-(dims.x%16))*(dims.x % 16!=1), (16 - (dims.y % 16)) * (dims.y % 16 != 1), (16 - (dims.z % 16)) * (dims.z % 16 != 1));
+		dims = dims + pad;
+		
+		
+		
+		h_dims[0] = dims.x, h_dims[1] = dims.y, h_dims[2] = dims.z;
+		int n_elems = dims.x * dims.y * dims.z;
+		
+		h_sdf = new float[n_elems];
+		if (n_elems > 1) {
+			//std::cout << "dims " << dims.x << " " << dims.y << " " << dims.z << std::endl;
+			//std::cout << "max " << voxDims[1].x << " " << voxDims[1].z << " " << voxDims[1].y << std::endl;
+			//std::cout << "min " << voxDims[0].x << " " << voxDims[0].z << " " << voxDims[0].y << std::endl;
+			float* d_sdf;
+			cutilSafeCall(cudaHostAlloc(&h_sdf, sizeof(float) * n_elems, cudaHostAllocDefault));
+			//std::cout << "dims.x*dims.y*dims.z " << dims.x<<" " <<dims.y <<" "<< dims.z << std::endl;
+			cutilSafeCall(cudaMalloc(&d_sdf, sizeof(float) * n_elems));
+			fillTensorKernel << <gridSize, blockSize >> > (d_sdf, n_elems);
+			createSDFTensorKernel << <gridSize, blockSize >> > (hashData, d_sdf, voxDims[0], dims);
+
+			cutilSafeCall(cudaMemcpy(h_sdf, d_sdf, sizeof(float) *n_elems, cudaMemcpyDeviceToHost));
+			cutilSafeCall(cudaFree(d_sdf));
+			//std::cout << "h_sdf: " << h_sdf[0] << std::endl;
+			
+			
+		}
+	}
+	return h_sdf;
+}

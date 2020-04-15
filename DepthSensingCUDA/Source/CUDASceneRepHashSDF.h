@@ -1,4 +1,9 @@
 #pragma once
+//TODO: there is a macro V in DXUT which messes with torch library, check if undef is optimal solution
+//#undef V
+//#include <torch/torch.h>
+//#include <torch/script.h>
+
 
 #include <cutil_inline.h>
 #include <cutil_math.h>
@@ -11,6 +16,8 @@
 
 #include "GlobalAppState.h"
 #include "TimingLog.h"
+#include "Scan2CAD/Scan2CAD.h"
+
 
 extern "C" void resetCUDA(HashData& hashData, const HashParams& hashParams);
 extern "C" void resetHashBucketMutexCUDA(HashData& hashData, const HashParams& hashParams);
@@ -24,6 +31,8 @@ extern "C" void bindInputDepthColorTextures(const DepthCameraData& depthCameraDa
 extern "C" void starveVoxelsKernelCUDA(HashData& hashData, const HashParams& hashParams);
 extern "C" void garbageCollectIdentifyCUDA(HashData& hashData, const HashParams& hashParams);
 extern "C" void garbageCollectFreeCUDA(HashData& hashData, const HashParams& hashParams);
+//torch pass
+extern "C" float* createSDFTensor(HashData & hashData, const HashParams & hashParams, int* min_pos, int* dims);
 
 class CUDASceneRepHashSDF
 {
@@ -79,6 +88,21 @@ public:
 
 		garbageCollect(depthCameraData);
 
+		//torch pass 1: find minimum and maximum voxel grid positions
+		//find min max positions for vox
+		int* dims;
+		int* min_pos;
+		dims = new int[3];
+		min_pos = new int[3];
+		float * sdf = createSDFTensor(m_hashData, m_hashParams, min_pos, dims);
+		int n_elems = dims[0] * dims[1] * dims[2];
+		
+		if (n_elems > 1) {
+			float res = 0.03f;
+			//Vox v = makeVoxFromSceneRepHashSDF(min_pos, dims, res, sdf);
+			//m_network.forward(v);
+			//vox.sdf = torch::from_blob(sdf.data(), { 1, 1, dims[2],dims[1],dims[0] }, torch::TensorOptions().dtype(torch::kFloat)).to(at::Device(torch::kCUDA));
+		}
 		m_numIntegratedFrames++;
 	}
 
@@ -342,9 +366,13 @@ private:
 
 	HashParams		m_hashParams;
 	HashData		m_hashData;
+	//Scan2CAD		m_network;
 
 	CUDAScan		m_cudaScan;
 	unsigned int	m_numIntegratedFrames;	//used for garbage collect
 
 	static Timer m_timer;
+
+	//torch
+	
 };
