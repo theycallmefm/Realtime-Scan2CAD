@@ -8,6 +8,8 @@
 
 #include "GlobalAppState.h"
 #include "GlobalCameraTrackingState.h"
+#include "Scan2CAD/GlobalScan2CADState.h"
+
 #include "TimingLog.h"
 #include "StdOutputLogger.h"
 #include "Util.h"
@@ -41,6 +43,7 @@
 #include "CUDAMarchingCubesHashSDF.h"
 #include "CUDAHistogramHashSDF.h"
 #include "CUDASceneRepChunkGrid.h"
+
 
 #include <iomanip>
 

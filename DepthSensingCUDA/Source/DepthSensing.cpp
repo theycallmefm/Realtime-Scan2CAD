@@ -29,6 +29,8 @@ CUDAMarchingCubesHashSDF*	g_marchingCubesHashSDF = NULL;
 CUDAHistrogramHashSDF*		g_historgram = NULL;
 CUDASceneRepChunkGrid*		g_chunkGrid = NULL;
 
+//Scan2CAD					g_neuralNetwork;
+
 
 RGBDSensor* getRGBDSensor()
 {
@@ -211,6 +213,7 @@ void RenderHelp()
 	g_pTxtHelper->DrawTextLine(L"  \t'M':\t Debug hash");
 	g_pTxtHelper->DrawTextLine(L"  \t'N':\t Save hash to file");
 	g_pTxtHelper->DrawTextLine(L"  \t'N':\t Load hash from file");
+	g_pTxtHelper->DrawTextLine(L"  \t'S':\t Extract CAD models");
 	g_pTxtHelper->End();
 }
 
@@ -319,6 +322,18 @@ void StopScanningAndLoadSDFHash(const std::string& filename = "test.hashgrid") {
 	//g_chunkGrid->debugCheckForDuplicates();
 }
 
+
+void ActivateScan2CAD() {
+	//Timer t;
+	
+
+	//vec4f posWorld = g_sceneRep->getLastRigidTransform() * GlobalAppState::get().s_streamingPos; // trans lags one frame
+	//vec3f p(posWorld.x, posWorld.y, posWorld.z);
+	g_sceneRep->activateScan2CAD();
+
+	//std::cout << "Loading Time " << t.getElapsedTime() << " seconds" << std::endl;
+
+}
 //--------------------------------------------------------------------------------------
 // Handle key presses
 //--------------------------------------------------------------------------------------
@@ -444,7 +459,8 @@ void CALLBACK OnKeyboard( UINT nChar, bool bKeyDown, bool bAltDown, void* pUserC
 				if (GlobalAppState::get().s_integrationEnabled)		std::cout << "integration enabled" << std::endl;
 				else std::cout << "integration disabled" << std::endl;
 			}
-
+		case 'S':
+			ActivateScan2CAD();
 		default:
 			break;
 		}
@@ -1131,6 +1147,7 @@ int main(int argc, char** argv)
 	try {
 		std::string fileNameDescGlobalApp;
 		std::string fileNameDescGlobalTracking;
+		std::string fileNameDescScan2CAD;
 		if (argc >= 3) {
 			fileNameDescGlobalApp = std::string(argv[1]);
 			fileNameDescGlobalTracking = std::string(argv[2]);
@@ -1141,9 +1158,11 @@ int main(int argc, char** argv)
 			fileNameDescGlobalApp = "zParametersManolisScan.txt";
 			
 			fileNameDescGlobalTracking = "zParametersTrackingDefault.txt";
+			fileNameDescScan2CAD = "zParametersScan2CAD.txt";
 		}
 		std::cout << VAR_NAME(fileNameDescGlobalApp) << " = " << fileNameDescGlobalApp << std::endl;
 		std::cout << VAR_NAME(fileNameDescGlobalTracking) << " = " << fileNameDescGlobalTracking << std::endl;
+		std::cout << VAR_NAME(fileNameDescScan2CAD) << " = " << fileNameDescScan2CAD << std::endl;
 		std::cout << std::endl;
 
 		//Read the global app state
@@ -1174,6 +1193,8 @@ int main(int argc, char** argv)
 		ParameterFile parameterFileGlobalTracking(fileNameDescGlobalTracking);
 		GlobalCameraTrackingState::getInstance().readMembers(parameterFileGlobalTracking);
 		//GlobalCameraTrackingState::getInstance().print();
+		ParameterFile parameterFileScan2CAD(fileNameDescScan2CAD);
+		GlobalScan2CADState::getInstance().readMembers(parameterFileScan2CAD);
 
 		{
 			//OVERWRITE streaming radius and streaming pose

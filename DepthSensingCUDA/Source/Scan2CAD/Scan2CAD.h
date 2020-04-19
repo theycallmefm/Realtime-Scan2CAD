@@ -1,4 +1,5 @@
 #pragma once
+//TODO: there is a macro V in DXUT which messes with torch library, check if undef is optimal solution
 #undef V
 #include <torch/torch.h>
 #include <torch/script.h>
@@ -7,9 +8,12 @@
 #include <fstream>
 #include<tuple>
 #include "VoxUtils.h"
+#include "VoxelUtilHashSDF.h"
 #include "hungarian-algorithm-cpp/Hungarian.h"
+#include <Eigen.h>
+#include "GlobalScan2CADState.h"
 
-//extern "C" void findMinMaxVoxGridPos(HashData & hashData, const HashParams & hashParams);
+extern "C" float* createSDFTensor(HashData & hashData, const HashParams & hashParams, int* min_pos, int* dims);
 
 class Scan2CAD
 {
@@ -23,7 +27,8 @@ public:
 	}
 
 	
-	std::unordered_map<std::string, at::Tensor> forward(Vox& v);
+	//std::unordered_map<std::string, Matrix4f> forward(Vox& v);
+	std::unordered_map<std::string, Matrix4f> forward(HashData& hashData, const HashParams& hashParams);
 
 
 private:
@@ -31,27 +36,30 @@ private:
 	void create();
 	void destroy(void);
 
-	void loadLatentSpace(const std::string folder);
-	void loadCADsdf(const std::string folder);
-	void loadModules(const std::string folder);
-	void loadTestPool(const std::string folder);
+	void loadLatentSpaceAll();
+	void loadLatentSpace();
+	void loadCADsdfAll();
+	at::Tensor loadCADsdf(std::vector<std::string>& cadkeys);
+	void loadModules();
+	void loadTestPool();
 	
-	torch::Tensor nms(int kernel_size, at::Tensor x);
+	//torch::Tensor nms(int kernel_size, at::Tensor x);
+	void nms(int kernel_size, at::Tensor& x);
 	void calcCenteredCrops(at::Tensor& center, at::Tensor& xdims, at::Tensor& dims, at::Tensor& smin, at::Tensor& smax, at::Tensor& tmin, at::Tensor& tmax);
 	void cropCenterCopy(at::Tensor& smin, at::Tensor& smax, at::Tensor& src, at::Tensor& tmin, at::Tensor& tmax, at::Tensor& target);
-	torch::Tensor makeCoord(at::Tensor dims);
+	void calcCenteredCropsAndCropCenterCopy(std::array <int, 3>& center, std::array <int, 3>& xdims, std::array <int, 3>& dims, at::Tensor& src, at::Tensor& target);
+	torch::Tensor makeCoord(std::array <int, 3>& dims);
 	
 	void retrievalByOptimalAssignment(at::Tensor& z_queries, std::vector<unsigned int>& survived, std::vector<std::string>& cadkey);
-	void calculateRotationViaProcrustes(at::Tensor& noc, at::Tensor& mask, at::Tensor& scale, at::Tensor& factor_interpolate, at::Tensor& grid2world, at::Tensor& rots);
+	void calculateRotationViaProcrustes(at::Tensor& noc, at::Tensor& mask, at::Tensor& scale, std::vector<std::array<float, 3>>& factor_interpolate, at::Tensor& grid2world, std::vector<Matrix3f>& rots);
 	
 	
-	torch::Tensor feedForwardObjectDetection(Vox& v, at::Tensor& ft_pred);
-	std::unordered_map<std::string, at::Tensor> feedForwardObject(Vox& v, torch::Tensor& ft_pred, torch::Tensor& ft_crop);
-	
+	std::vector<at::Tensor> feedForwardObjectDetection(float& res_scan, at::Tensor& sdf, at::Tensor& ft_pred);
+	std::unordered_map<std::string, Matrix4f> feedForwardObject(Vox& v, torch::Tensor& ft_pred, torch::Tensor& ft_crop);
+	Vector3f rotationMatrixToEulerAngles(Matrix4f& R);
 
 	torch::jit::script::Module backbone, decode, feature2heatmap0, feature2descriptor, block0, feature2mask, feature2noc, feature2scale;
 	std::unordered_map<std::string, at::Tensor> cadkey2latent, cadkey2sdf;
-	const std::string checkpoint_path;
 	std::vector<std::string> cadkey_pool;
 
 
@@ -59,6 +67,8 @@ private:
 	double thresh_objectness = 0.5;
 	int canonical_cube = 32;
 
-	std::vector<std::unordered_map<std::string, at::Tensor>> collector;
-
+	//std::vector<std::unordered_map<std::string, at::Tensor>> collector;
+	std::vector<std::array<float, 3>> factor_interpolate_collected;
+	std::vector<Vector3i> obj_center_collected;
+	//std::vector<at::Tensor> ft_crop_collected;
 };
