@@ -18,6 +18,7 @@ CUDARGBDSensor				g_CudaDepthSensor;
 CUDARGBDAdapter				g_RGBDAdapter;
 DX11RGBDRenderer			g_RGBDRenderer;
 DX11CustomRenderTarget		g_CustomRenderTarget;
+DX11CustomRenderTarget		g_Scan2CADRenderTarget;
 DX11CustomRenderTarget		g_RenderToFileTarget;
 
 CUDACameraTrackingMultiRes*		g_cameraTracking	 = NULL;
@@ -30,7 +31,12 @@ CUDAHistrogramHashSDF*		g_historgram = NULL;
 CUDASceneRepChunkGrid*		g_chunkGrid = NULL;
 
 //Scan2CAD					g_neuralNetwork;
-
+std::unique_ptr<DirectX::CommonStates> m_states;
+std::unordered_map<std::string, std::unique_ptr<DirectX::Model>> m_models;
+bool enter = true;
+std::string cadkey_s = "";
+DirectX::SimpleMath::Matrix cad_m;
+std::unique_ptr<DirectX::Model> vbo_model;
 
 RGBDSensor* getRGBDSensor()
 {
@@ -213,7 +219,7 @@ void RenderHelp()
 	g_pTxtHelper->DrawTextLine(L"  \t'M':\t Debug hash");
 	g_pTxtHelper->DrawTextLine(L"  \t'N':\t Save hash to file");
 	g_pTxtHelper->DrawTextLine(L"  \t'N':\t Load hash from file");
-	g_pTxtHelper->DrawTextLine(L"  \t'S':\t Extract CAD models");
+	g_pTxtHelper->DrawTextLine(L"  \t'V':\t Extract CAD models");
 	g_pTxtHelper->End();
 }
 
@@ -345,7 +351,9 @@ void CALLBACK OnKeyboard( UINT nChar, bool bKeyDown, bool bAltDown, void* pUserC
 
 	if( bKeyDown ) {
 		wchar_t sz[200];
-
+		if (g_sceneRep->activeScan2CAD()) {
+			g_sceneRep->activateScan2CAD();
+		}
 		switch( nChar )
 		{
 		case VK_F1:
@@ -459,8 +467,9 @@ void CALLBACK OnKeyboard( UINT nChar, bool bKeyDown, bool bAltDown, void* pUserC
 				if (GlobalAppState::get().s_integrationEnabled)		std::cout << "integration enabled" << std::endl;
 				else std::cout << "integration disabled" << std::endl;
 			}
-		case 'S':
+		case 'V':
 			ActivateScan2CAD();
+			GlobalAppState::get().s_RenderMode = 9;
 		default:
 			break;
 		}
@@ -499,6 +508,30 @@ bool CALLBACK IsD3D11DeviceAcceptable( const CD3D11EnumAdapterInfo *AdapterInfo,
 //--------------------------------------------------------------------------------------
 HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFACE_DESC* pBackBufferSurfaceDesc, void* pUserContext)
 {
+	
+
+	//std::unique_ptr<DirectX::CommonStates> m_states;
+	std::unique_ptr<DirectX::IEffectFactory> m_fxFactory;
+	std::shared_ptr<DirectX::IEffect> ieffect;
+	m_states = std::make_unique<DirectX::CommonStates>(pd3dDevice);
+	m_fxFactory = std::make_unique<DirectX::EffectFactory>(pd3dDevice);
+	//std::unique_ptr<DirectX::Model> m_model;
+	std::vector<std::string> cadkeys = GlobalScan2CADState::get().s_cadkeypool;
+	for (int i = 0; i < cadkeys.size(); i++) {
+
+		std::string sdkmesh = GlobalScan2CADState::get().s_sdkmeshPath + "/" + cadkeys[i].substr(0, 8) + "/" + cadkeys[i].substr(9, cadkeys[i].length()) + ".sdkmesh";
+		std::wstring widestr = std::wstring(sdkmesh.begin(), sdkmesh.end());
+		const wchar_t* widecstr = widestr.c_str();
+		std::unique_ptr<DirectX::Model> model = DirectX::Model::CreateFromSDKMESH(pd3dDevice, widecstr, *m_fxFactory);
+		m_models[cadkeys[i]] = std::move(model);
+
+	}
+	std::string vbo = GlobalScan2CADState::get().s_sdkmeshPath+"/cup.vbo";
+	std::wstring widestr = std::wstring(vbo.begin(), vbo.end());
+	const wchar_t* widecstr = widestr.c_str();
+	vbo_model= DirectX::Model::CreateFromVBO(pd3dDevice, widecstr, ieffect);
+	
+	
 	Util::printMemoryUseMB("init");
 
 	HRESULT hr = S_OK;
@@ -542,6 +575,7 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 
 	V_RETURN(g_RGBDRenderer.OnD3D11CreateDevice(pd3dDevice, GlobalAppState::get().s_adapterWidth, GlobalAppState::get().s_adapterHeight));
 	V_RETURN(g_CustomRenderTarget.OnD3D11CreateDevice(pd3dDevice, GlobalAppState::get().s_adapterWidth, GlobalAppState::get().s_adapterHeight, formats));
+	V_RETURN(g_Scan2CADRenderTarget.OnD3D11CreateDevice(pd3dDevice, GlobalAppState::get().s_adapterWidth, GlobalAppState::get().s_adapterHeight, formats));
 	if (GlobalAppState::get().s_renderToFile) {
 		std::vector<DXGI_FORMAT> rtfFormat;
 		rtfFormat.push_back(DXGI_FORMAT_R8G8B8A8_UNORM); // _SRGB
@@ -615,6 +649,8 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
 	g_RGBDRenderer.OnD3D11DestroyDevice();
 	g_CustomRenderTarget.OnD3D11DestroyDevice();
 	g_RenderToFileTarget.OnD3D11DestroyDevice();
+
+	g_Scan2CADRenderTarget.OnD3D11DestroyDevice();
 
 	SAFE_DELETE(g_cameraTracking);
 	SAFE_DELETE(g_cameraTrackingRGBD);
@@ -844,16 +880,9 @@ void reconstruction()
 // Render the scene using the D3D11 device
 //--------------------------------------------------------------------------------------
 
+
 void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext* pd3dImmediateContext, double fTime, float fElapsedTime, void* pUserContext )
 {
-	//g_historgram->computeHistrogram(g_sceneRep->getHashData(), g_sceneRep->getHashParams());
-
-	// If the settings dialog is being shown, then render it instead of rendering the app's scene
-	//if(g_D3DSettingsDlg.IsActive())
-	//{
-	//	g_D3DSettingsDlg.OnRender(fElapsedTime);
-	//	return;
-	//}
 
 	// Clear the back buffer
 	static float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -861,7 +890,11 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
 	ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
 	pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor);
 	pd3dImmediateContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
-
+	
+	DirectX::SimpleMath::Matrix m_world;
+	DirectX::SimpleMath::Matrix m_view;
+	DirectX::SimpleMath::Matrix m_proj;
+	
 #ifdef SENSOR_DATA_READER
 	//only if sensor data reader
 	if (GlobalAppState::get().s_sensorIdx == GlobalAppState::Sensor_SensorDataReader && GlobalAppState::get().s_playData) {
@@ -887,7 +920,7 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
 
 	// if we have received any valid new depth data we may need to draw
 	HRESULT bGotDepth = g_CudaDepthSensor.process(pd3dImmediateContext);
-
+	
 	// Filtering
 	g_CudaDepthSensor.setFiterDepthValues(GlobalAppState::get().s_depthFilter, GlobalAppState::get().s_depthSigmaD, GlobalAppState::get().s_depthSigmaR);
 	g_CudaDepthSensor.setFiterIntensityValues(GlobalAppState::get().s_colorFilter, GlobalAppState::get().s_colorSigmaD, GlobalAppState::get().s_colorSigmaR);
@@ -906,7 +939,25 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
 
 	mat4f t = mat4f::identity();
 	t(1,1) *= -1.0f;	view = t * view * t;	//t is self-inverse
+	
+	vec4f posWorld = g_sceneRep->getLastRigidTransform() * GlobalAppState::get().s_streamingPos; // trans lags one frame
+	vec3f p(posWorld.x, posWorld.y, posWorld.z);
+	//std::cout << "last rigid transform" << std::endl<< g_sceneRep->getLastRigidTransform() <<std::endl<<std::endl;
+	//std::cout << "camera position:" <<std::endl<< p << std::endl<<std::endl;
+	float* camPos = (float*)g_CudaDepthSensor.getCameraSpacePositionsFloat4();
+	
+	
+	float scale_factor = 1;
+	DirectX::SimpleMath::Matrix camera = DirectX::SimpleMath::Matrix::CreateTranslation((-p.x) * scale_factor, (-p.y-0.4) * scale_factor, (p.z+0.4) * scale_factor);
+	m_world = DirectX::SimpleMath::Matrix::CreateScale(0.5 * scale_factor, 0.5 * scale_factor, 0.5 * scale_factor)* DirectX::SimpleMath::Matrix::CreateTranslation(0.96*scale_factor, 2.19 * scale_factor, 0.57*scale_factor)* camera;
+	m_proj = DirectX::XMFLOAT4X4(*g_Camera.GetProjMatrix()->m);
+	m_view = DirectX::XMFLOAT4X4(view.matrix);
 
+
+	//m_view = camera;
+	//m_view = m_view * DirectX::SimpleMath::Matrix::CreateTranslation(camPos[0], camPos[1], camPos[2]);
+	//vbo_model->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
+	pd3dImmediateContext->OMSetBlendState(m_states->Opaque(), DirectX::Colors::Black, 0xFFFFFFFF);
 	if (bGotDepth == S_OK) {
 		if (GlobalAppState::getInstance().s_recordData) {
 			g_RGBDAdapter.recordFrame();
@@ -934,15 +985,27 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
 	{
 		//default render mode
 		const mat4f& renderIntrinsics = g_RGBDAdapter.getColorIntrinsics();
-
+		//std::cout << "renderIntrinsics" <<  std::endl <<renderIntrinsics << std::endl;
 		//always render, irrespective whether there is a new depth frame available
 		g_CustomRenderTarget.Clear(pd3dImmediateContext);
+		
 		g_CustomRenderTarget.Bind(pd3dImmediateContext);
+		
 		g_RGBDRenderer.RenderDepthMap(pd3dImmediateContext, g_rayCast->getRayCastData().d_depth, g_rayCast->getRayCastData().d_colors, g_rayCast->getRayCastParams().m_width, g_rayCast->getRayCastParams().m_height, MatrixConversion::toMlib(g_rayCast->getRayCastParams().m_intrinsicsInverse), view, renderIntrinsics, g_CustomRenderTarget.getWidth(), g_CustomRenderTarget.getHeight(), GlobalAppState::get().s_renderingDepthDiscontinuityThresOffset, GlobalAppState::get().s_renderingDepthDiscontinuityThresLin);
+		
+		//TODO: render CAD models here
+		
 		g_CustomRenderTarget.Unbind(pd3dImmediateContext);
-
+		//m_model->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
 		DX11PhongLighting::render(pd3dImmediateContext, g_CustomRenderTarget.GetSRV(1), g_CustomRenderTarget.GetSRV(2), g_CustomRenderTarget.GetSRV(3), GlobalAppState::get().s_useColorForRendering, g_CustomRenderTarget.getWidth(), g_CustomRenderTarget.getHeight());		
+		
+		//m_model->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
 		DX11QuadDrawer::RenderQuad(pd3dImmediateContext, DX11PhongLighting::GetColorsSRV(), 1.0f);
+		
+		
+
+
+
 #ifdef STRUCTURE_SENSOR
 		if (GlobalAppState::get().s_sensorIdx == GlobalAppState::Sensor_StructureSensor) {
 			ID3D11Texture2D* pSurface;
@@ -983,18 +1046,129 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
 		//DX11QuadDrawer::RenderQuadDynamic(DXUTGetD3D11Device(), pd3dImmediateContext, (float*)g_rayCast->getRayCastData().d_depth4DV, 4, g_rayCast->getRayCastParams().m_width, g_rayCast->getRayCastParams().m_height, 500.0f);	
 	}
 	else if(GlobalAppState::get().s_RenderMode == 8) {
-		//DX11QuadDrawer::RenderQuadDynamic(DXUTGetD3D11Device(), pd3dImmediateContext, (float*)g_CudaDepthSensor.getColorMapFilteredLastFrameFloat4(), 4, g_CudaDepthSensor.getColorWidth(), g_CudaDepthSensor.getColorHeight());
+		//default render mode
+		const mat4f& renderIntrinsics = g_RGBDAdapter.getColorIntrinsics();
+		//m_model->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
+		//always render, irrespective whether there is a new depth frame available
+		g_CustomRenderTarget.Clear(pd3dImmediateContext);
+		g_CustomRenderTarget.Bind(pd3dImmediateContext);
+		g_RGBDRenderer.RenderDepthMap(pd3dImmediateContext, g_rayCast->getRayCastData().d_depth, g_rayCast->getRayCastData().d_colors, g_rayCast->getRayCastParams().m_width, g_rayCast->getRayCastParams().m_height, MatrixConversion::toMlib(g_rayCast->getRayCastParams().m_intrinsicsInverse), view, renderIntrinsics, g_CustomRenderTarget.getWidth(), g_CustomRenderTarget.getHeight(), GlobalAppState::get().s_renderingDepthDiscontinuityThresOffset, GlobalAppState::get().s_renderingDepthDiscontinuityThresLin);
+
+		//TODO: render CAD models here
+
+		g_CustomRenderTarget.Unbind(pd3dImmediateContext);
+		
+
+		//m_model->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
+		
+		DX11PhongLighting::render(pd3dImmediateContext, g_CustomRenderTarget.GetSRV(1), g_CustomRenderTarget.GetSRV(2), g_CustomRenderTarget.GetSRV(3), GlobalAppState::get().s_useColorForRendering, g_CustomRenderTarget.getWidth(), g_CustomRenderTarget.getHeight());
+		
+		//m_model->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
+		//DX11QuadDrawer::RenderQuadDynamic(DXUTGetD3D11Device(), pd3dImmediateContext, (float*)g_CudaDepthSensor.getAndComputeDepthHSV(), 4, g_CudaDepthSensor.getColorWidth(), g_CudaDepthSensor.getColorHeight());
+		DX11QuadDrawer::RenderQuad(pd3dImmediateContext, DX11PhongLighting::GetColorsSRV(), 1.0f);
 	}
 	else if(GlobalAppState::get().s_RenderMode == 9) {
+		//scan2cad render mode
 		const mat4f& renderIntrinsics = g_RGBDAdapter.getColorIntrinsics();
-
+		std::vector<CAD> cads = g_sceneRep->getCADS();
+		pd3dImmediateContext->ClearState();
 		g_CustomRenderTarget.Clear(pd3dImmediateContext);
 		g_CustomRenderTarget.Bind(pd3dImmediateContext);
 		g_RGBDRenderer.RenderDepthMap(pd3dImmediateContext, g_CudaDepthSensor.getDepthMapColorSpaceFloat(), g_CudaDepthSensor.getColorMapFilteredFloat4(), g_RGBDAdapter.getWidth(), g_RGBDAdapter.getHeight(), g_RGBDAdapter.getColorIntrinsicsInv(), view, renderIntrinsics, g_CustomRenderTarget.getWidth(), g_CustomRenderTarget.getHeight(), GlobalAppState::get().s_renderingDepthDiscontinuityThresOffset, GlobalAppState::get().s_renderingDepthDiscontinuityThresLin);
 		g_CustomRenderTarget.Unbind(pd3dImmediateContext);
 
+
+		//g_Scan2CADRenderTarget.Unbind(pd3dImmediateContext);
+
 		DX11PhongLighting::render(pd3dImmediateContext, g_CustomRenderTarget.GetSRV(1), g_CustomRenderTarget.GetSRV(2), g_CustomRenderTarget.GetSRV(3), GlobalAppState::get().s_useColorForRendering, g_CustomRenderTarget.getWidth(), g_CustomRenderTarget.getHeight());
 		DX11QuadDrawer::RenderQuad(pd3dImmediateContext, DX11PhongLighting::GetColorsSRV(), 1.0f);
+		pd3dImmediateContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
+		if (enter && cads.size() > 0) {
+
+			for (auto& it : cads) {
+				float c_S = 2.0f;//correction scale
+				DirectX::SimpleMath::Matrix T = DirectX::SimpleMath::Matrix::CreateTranslation(it.getTranslation()(0), it.getTranslation()(1), it.getTranslation()(2));
+				DirectX::SimpleMath::Matrix S = DirectX::SimpleMath::Matrix::CreateScale(it.getScale()(0)* c_S, it.getScale()(1) * c_S, it.getScale()(2) * c_S);
+				//DirectX::SimpleMath::Matrix Rx = DirectX::SimpleMath::Matrix::CreateRotationX(it.getRotation()(0));
+				//DirectX::SimpleMath::Matrix Ry = DirectX::SimpleMath::Matrix::CreateRotationY(it.getRotation()(1));
+				//DirectX::SimpleMath::Matrix Rz = DirectX::SimpleMath::Matrix::CreateRotationZ(it.getRotation()(2));
+				//DirectX::SimpleMath::Matrix m_world = S * Rz * Ry * Rx * T;
+				//m_world = S * Rx * Ry * Rz * T;
+				
+				/*std::cout << it.getCADKey() << std::endl << std::endl;
+				std::cout << "Translation:" << std::endl;
+				std::cout << it.getTranslation() << std::endl << std::endl;
+				std::cout << "Rotation:" << std::endl;
+				std::cout << it.getRotation() << std::endl << std::endl;*/
+				/*std::cout << "Scale:" << std::endl;
+				std::cout << it.getScale() << std::endl << std::endl;
+				std::cout << "Transform:" << std::endl;
+				std::cout << it.getTransform() << std::endl << std::endl;*/
+
+
+				
+
+				float angleX = 90 * (3.1415926535897932 / 180);
+				float angleY = 0 * (3.1415926535897932 / 180);
+				float angleZ = 0 * (3.1415926535897932 / 180);
+
+			
+
+				DirectX::SimpleMath::Matrix correctX = DirectX::SimpleMath::Matrix::CreateRotationX(angleX);
+				
+				DirectX::SimpleMath::Matrix obj_rot_r = DirectX::SimpleMath::Matrix(it.getRotation().data());
+				DirectX::SimpleMath::Matrix obj_rot = correctX*obj_rot_r;
+				
+				m_world = S* obj_rot_r *correctX * T;
+				//m_world = S *  obj_rot * T;
+				//m_world = S  * T;
+				//m_world = DirectX::SimpleMath::Matrix(it.getTransform().data());
+				mat4f transform = g_sceneRep->getLastRigidTransform();
+				//(1,1,1) (-1,1,1) (1,-1,1) (1,1,-1) 
+				//(-1,-1,1) (1,-1,1)  (1,-1,-1) Best:(1,-1,1)
+				vec4f posWorld = g_sceneRep->getLastRigidTransform() * GlobalAppState::get().s_streamingPos; // trans lags one frame
+				vec3f p(posWorld.x, posWorld.y, posWorld.z);
+				std::cout << transform << std::endl;;
+				transform._m03 += 0; transform._m13 += 0; transform._m23 += 0;
+				
+				mat4f rot_transformX, rot_transformY, rot_transformScale; 
+				rot_transformX.setRotationX(0);
+				rot_transformScale.setScale(1, -1, 1);
+				//rot_transformY.setRotationY(180);
+				//transform =  transform*rot_transform;
+				//transform._m03 = p.x; transform._m13 = p.y; transform._m23 = p.z;
+				//transform = rot_transformY*rot_transformX * transform;
+				
+				transform =  rot_transformX * transform* rot_transformScale;
+				//transform._m02 = -transform._m02; transform._m12 = -transform._m12; transform._m22 = -transform._m22;
+				//transform._m32 = -transform._m32;
+				m_view = DirectX::XMFLOAT4X4(view.matrix)* DirectX::SimpleMath::Matrix(transform.getTranspose().getInverse().matrix);
+				
+				//std::cout <<"camera pos: " <<m_view._41 << " " << m_view._42 << " " << m_view._43 << " " << m_view._44 << std::endl << std::endl;
+				//m_view._21 = -m_view._21; m_view._22 = -m_view._22; m_view._23 = -m_view._23;
+				
+				//m_proj = mirror_proj*m_proj;
+				//m_world = DirectX::SimpleMath::Matrix::Identity;
+				/*std::cout << "m_view: " << std::endl;
+				std::cout << m_view._11 << " " << m_view._12 << " " << m_view._13 << " " << m_view._14 << std::endl;
+				std::cout << m_view._21 << " " << m_view._22 << " " << m_view._23 << " " << m_view._24 << std::endl;
+				std::cout << m_view._31 << " " << m_view._32 << " " << m_view._33 << " " << m_view._34 << std::endl;
+				std::cout << m_view._41 << " " << m_view._42 << " " << m_view._43 << " " << m_view._44 << std::endl << std::endl;
+				
+				
+				std::cout << "obj_rot: " << std::endl;
+				std::cout << obj_rot._11 << " " << obj_rot._12 << " " << obj_rot._13 << " " << obj_rot._14 << std::endl;
+				std::cout << obj_rot._21 << " " << obj_rot._22 << " " << obj_rot._23 << " " << obj_rot._24 << std::endl;
+				std::cout << obj_rot._31 << " " << obj_rot._32 << " " << obj_rot._33 << " " << obj_rot._34 << std::endl;
+				std::cout << obj_rot._41 << " " << obj_rot._42 << " " << obj_rot._43 << " " << obj_rot._44 << std::endl << std::endl;*/
+
+				m_models[it.getCADKey()]->Draw(pd3dImmediateContext, *m_states, m_world, m_view, m_proj);
+				//break;
+			}
+
+			//enter = false;
+		}
+		
 	}
 
 	// Stop Timing
@@ -1022,7 +1196,7 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
 	if (GlobalAppState::get().s_renderToFile) {
 		renderToFile(pd3dImmediateContext);
 	}
-
+	
 	DXUT_EndPerfEvent();
 }
 

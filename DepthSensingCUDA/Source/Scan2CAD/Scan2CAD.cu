@@ -116,9 +116,9 @@ extern "C" float* createSDFTensor(HashData & hashData, const HashParams & hashPa
 			int3 pad = make_int3((16 - (dims.x % 16)) * (dims.x % 16 != 0), (16 - (dims.y % 16)) * (dims.y % 16 != 0), (16 - (dims.z % 16)) * (dims.z % 16 != 0));
 			dims = dims + pad;
 
-			std::cout << "max " << voxDims[1].x << " " << voxDims[1].z << " " << voxDims[1].y << std::endl;
-			std::cout << "min " << voxDims[0].x << " " << voxDims[0].z << " " << voxDims[0].y << std::endl;
-			std::cout << "dims " << dims.x << " " << dims.y << " " << dims.z << std::endl;
+			//std::cout << "max " << voxDims[1].x << " " << voxDims[1].z << " " << voxDims[1].y << std::endl;
+			//std::cout << "min " << voxDims[0].x << " " << voxDims[0].z << " " << voxDims[0].y << std::endl;
+			//std::cout << "dims " << dims.x << " " << dims.y << " " << dims.z << std::endl;
 			h_dims[0] = dims.x, h_dims[1] = dims.y, h_dims[2] = dims.z;
 			int n_elems = dims.x * dims.y * dims.z;
 

@@ -2,7 +2,7 @@
 
 #include <windows.h>
 #include <d3d11.h>
-#include <xnamath.h>
+//#include <xnamath.h>
 #include "DX11Utils.h"
 #include "resource.h"
 
@@ -44,8 +44,18 @@
 #include "CUDAHistogramHashSDF.h"
 #include "CUDASceneRepChunkGrid.h"
 
-
+#include "DXUT\Optional\SDKmesh.h"
 #include <iomanip>
+//TODO delete unnecessary header includes
+#include "CommonStates.h"
+//#include "DirectXHelpers.h"
+#include "Effects.h"
+#include "GeometricPrimitive.h"
+//#include "GraphicsMemory.h"
+#include "Model.h"
+#include "PrimitiveBatch.h"
+#include "SimpleMath.h"
+#include "VertexTypes.h"
 
 #ifdef KINECT
 #pragma comment(lib, "Kinect10.lib")

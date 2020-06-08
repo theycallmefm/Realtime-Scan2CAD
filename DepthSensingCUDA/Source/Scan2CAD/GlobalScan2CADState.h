@@ -21,7 +21,8 @@
 	X(std::string, s_feature2mask) \
 	X(std::string, s_feature2noc) \
 	X(std::string, s_feature2scale) \
-	X(std::vector<std::string>, s_cadkeypool)
+	X(std::vector<std::string>, s_cadkeypool) \
+	X(std::string, s_sdkmeshPath)
 
 #ifndef VAR_NAME
 #define VAR_NAME(x) #x

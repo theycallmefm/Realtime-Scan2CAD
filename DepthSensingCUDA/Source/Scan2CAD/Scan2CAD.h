@@ -12,6 +12,8 @@
 #include "hungarian-algorithm-cpp/Hungarian.h"
 #include <Eigen.h>
 #include "GlobalScan2CADState.h"
+#include "../GlobalAppState.h"
+#include "CAD.h"
 
 extern "C" float* createSDFTensor(HashData & hashData, const HashParams & hashParams, int* min_pos, int* dims);
 
@@ -28,7 +30,7 @@ public:
 
 	
 	//std::unordered_map<std::string, Matrix4f> forward(Vox& v);
-	std::unordered_map<std::string, Matrix4f> forward(HashData& hashData, const HashParams& hashParams);
+	std::vector<CAD> forward(HashData& hashData, const HashParams& hashParams);
 
 
 private:
@@ -51,11 +53,13 @@ private:
 	torch::Tensor makeCoord(std::array <int, 3>& dims);
 	
 	void retrievalByOptimalAssignment(at::Tensor& z_queries, std::vector<unsigned int>& survived, std::vector<std::string>& cadkey);
-	void calculateRotationViaProcrustes(at::Tensor& noc, at::Tensor& mask, at::Tensor& scale, std::vector<std::array<float, 3>>& factor_interpolate, at::Tensor& grid2world, std::vector<Matrix3f>& rots);
+	void calculateRotationViaProcrustes(at::Tensor& noc, at::Tensor& mask, at::Tensor& scale, std::vector<std::array<float, 3>>& factor_interpolate, at::Tensor& grid2world, std::vector<Matrix3f>& rots, std::vector<std::string>cadkey_pred);
 	
 	
 	std::vector<at::Tensor> feedForwardObjectDetection(float& res_scan, at::Tensor& sdf, at::Tensor& ft_pred);
-	std::unordered_map<std::string, Matrix4f> feedForwardObject(Vox& v, torch::Tensor& ft_pred, torch::Tensor& ft_crop);
+	std::vector<CAD> feedForwardObject(Vox& v, torch::Tensor& ft_pred, torch::Tensor& ft_crop);
+	
+	
 	Vector3f rotationMatrixToEulerAngles(Matrix4f& R);
 
 	torch::jit::script::Module backbone, decode, feature2heatmap0, feature2descriptor, block0, feature2mask, feature2noc, feature2scale;
@@ -67,8 +71,6 @@ private:
 	double thresh_objectness = 0.5;
 	int canonical_cube = 32;
 
-	//std::vector<std::unordered_map<std::string, at::Tensor>> collector;
 	std::vector<std::array<float, 3>> factor_interpolate_collected;
 	std::vector<Vector3i> obj_center_collected;
-	//std::vector<at::Tensor> ft_crop_collected;
 };

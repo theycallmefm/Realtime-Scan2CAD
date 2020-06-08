@@ -84,8 +84,10 @@ public:
 
 		garbageCollect(depthCameraData);
 
-		if (m_activateScan2CAD) {
+		
+		if (m_activateScan2CAD &&!(m_numIntegratedFrames%6)&&(m_numIntegratedFrames>5)) {
 			extractCAD();
+			//m_activateScan2CAD = false;
 		}
 
 		m_numIntegratedFrames++;
@@ -107,17 +109,21 @@ public:
 	}
 
 	void extractCAD() {
-		m_network.forward(m_hashData, m_hashParams);
+		m_cads = m_network.forward(m_hashData, m_hashParams);
 	}
 
 	void activateScan2CAD() {
-		m_activateScan2CAD = !m_activateScan2CAD;
+		m_activateScan2CAD = true;
 		if (m_activateScan2CAD) {
 			std::cout << "Scan2CAD activated" << std::endl;
 		}
 		else {
 			std::cout << "Scan2CAD deactivated" << std::endl;
 		}
+	}
+
+	bool activeScan2CAD() {
+		return m_activateScan2CAD;
 	}
 	
 	//! resets the hash to the initial state (i.e., clears all data)
@@ -254,6 +260,11 @@ public:
 
 		//getchar();
 	}
+
+	const std::vector<CAD>& getCADS() const {
+		return m_cads;
+	}
+
 private:
 
 	void create(const HashParams& params) {
@@ -375,5 +386,5 @@ private:
 	//Scan2CAD parameters
 	Scan2CAD		m_network;
 	bool m_activateScan2CAD = false;
-	
+	std::vector<CAD> m_cads;
 };

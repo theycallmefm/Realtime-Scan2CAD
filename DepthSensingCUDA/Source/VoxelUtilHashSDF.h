@@ -52,15 +52,15 @@ typedef signed char schar;
 static const int LOCK_ENTRY = -1;
 static const int FREE_ENTRY = -2;
 static const int NO_OFFSET = 0;
- 
+
 __align__(16)
-struct HashEntry 
+struct HashEntry
 {
 	int3	pos;		//hash position (lower left corner of SDFBlock))
 	int		ptr;		//pointer into heap to SDFBlock
 	uint	offset;		//offset for collisions
 
-	
+
 	__device__ void operator=(const struct HashEntry& e) {
 		//((int*)this)[0] = ((const int*)&e)[0];
 		//((int*)this)[1] = ((const int*)&e)[1];
@@ -89,7 +89,7 @@ struct Voxel {
 
 extern  __constant__ HashParams c_hashParams;
 extern "C" void updateConstantHashParams(const HashParams& hashParams);
- 
+
 struct HashData {
 
 	///////////////
@@ -97,7 +97,7 @@ struct HashData {
 	///////////////
 
 	__device__ __host__
-	HashData() {
+		HashData() {
 		d_heap = NULL;
 		d_heapCounter = NULL;
 		d_hash = NULL;
@@ -111,7 +111,7 @@ struct HashData {
 	}
 
 	__host__
-	void allocate(const HashParams& params, bool dataOnGPU = true) {
+		void allocate(const HashParams& params, bool dataOnGPU = true) {
 		m_bIsOnGPU = dataOnGPU;
 		if (m_bIsOnGPU) {
 			cutilSafeCall(cudaMalloc(&d_heap, sizeof(unsigned int) * params.m_numSDFBlocks));
@@ -123,7 +123,9 @@ struct HashData {
 			cutilSafeCall(cudaMalloc(&d_hashCompactifiedCounter, sizeof(int)));
 			cutilSafeCall(cudaMalloc(&d_SDFBlocks, sizeof(Voxel) * params.m_numSDFBlocks * params.m_SDFBlockSize*params.m_SDFBlockSize*params.m_SDFBlockSize));
 			cutilSafeCall(cudaMalloc(&d_hashBucketMutex, sizeof(int)* params.m_hashNumBuckets));
-		} else {
+
+		}
+		else {
 			d_heap = new unsigned int[params.m_numSDFBlocks];
 			d_heapCounter = new unsigned int[1];
 			d_hash = new HashEntry[params.m_hashNumBuckets * params.m_hashBucketSize];
@@ -133,20 +135,21 @@ struct HashData {
 			d_hashCompactifiedCounter = new int[1];
 			d_SDFBlocks = new Voxel[params.m_numSDFBlocks * params.m_SDFBlockSize*params.m_SDFBlockSize*params.m_SDFBlockSize];
 			d_hashBucketMutex = new int[params.m_hashNumBuckets];
+
 		}
 
 		updateParams(params);
 	}
 
 	__host__
-	void updateParams(const HashParams& params) {
+		void updateParams(const HashParams& params) {
 		if (m_bIsOnGPU) {
 			updateConstantHashParams(params);
-		} 
+		}
 	}
 
 	__host__
-	void free() {
+		void free() {
 		if (m_bIsOnGPU) {
 			cutilSafeCall(cudaFree(d_heap));
 			cutilSafeCall(cudaFree(d_heapCounter));
@@ -157,7 +160,9 @@ struct HashData {
 			cutilSafeCall(cudaFree(d_hashCompactifiedCounter));
 			cutilSafeCall(cudaFree(d_SDFBlocks));
 			cutilSafeCall(cudaFree(d_hashBucketMutex));
-		} else {
+
+		}
+		else {
 			if (d_heap) delete[] d_heap;
 			if (d_heapCounter) delete[] d_heapCounter;
 			if (d_hash) delete[] d_hash;
@@ -181,9 +186,9 @@ struct HashData {
 	}
 
 	__host__
-	HashData copyToCPU() const {
+		HashData copyToCPU() const {
 		HashParams params;
-		
+
 		HashData hashData;
 		hashData.allocate(params, false);	//allocate the data on the CPU
 		cutilSafeCall(cudaMemcpy(hashData.d_heap, d_heap, sizeof(unsigned int) * params.m_numSDFBlocks, cudaMemcpyDeviceToHost));
@@ -195,7 +200,7 @@ struct HashData {
 		cutilSafeCall(cudaMemcpy(hashData.d_hashCompactifiedCounter, d_hashCompactifiedCounter, sizeof(unsigned int), cudaMemcpyDeviceToHost));
 		cutilSafeCall(cudaMemcpy(hashData.d_SDFBlocks, d_SDFBlocks, sizeof(Voxel) * params.m_numSDFBlocks * params.m_SDFBlockSize*params.m_SDFBlockSize*params.m_SDFBlockSize, cudaMemcpyDeviceToHost));
 		cutilSafeCall(cudaMemcpy(hashData.d_hashBucketMutex, d_hashBucketMutex, sizeof(int)* params.m_hashNumBuckets, cudaMemcpyDeviceToHost));
-		
+
 		return hashData;	//TODO MATTHIAS look at this (i.e,. when does memory get destroyed ; if it's in the destructer it would kill everything here 
 	}
 
@@ -204,17 +209,17 @@ struct HashData {
 	/////////////////
 	// Device part //
 	/////////////////
-//#define __CUDACC__
+	//#define __CUDACC__
 #ifdef __CUDACC__
 
 	__device__
-	const HashParams& params() const {
+		const HashParams& params() const {
 		return c_hashParams;
 	}
 
 	//! see teschner et al. (but with correct prime values)
-	__device__ 
-	uint computeHashPos(const int3& virtualVoxelPos) const { 
+	__device__
+		uint computeHashPos(const int3& virtualVoxelPos) const {
 		const int p0 = 73856093;
 		const int p1 = 19349669;
 		const int p2 = 83492791;
@@ -225,13 +230,13 @@ struct HashData {
 	}
 
 	//merges two voxels (v0 the currently stored voxel, v1 is the input voxel)
-	__device__ 
-	void combineVoxel(const Voxel &v0, const Voxel& v1, Voxel &out) const 	{
+	__device__
+		void combineVoxel(const Voxel &v0, const Voxel& v1, Voxel &out) const {
 
 		//v.color = (10*v0.weight * v0.color + v1.weight * v1.color)/(10*v0.weight + v1.weight);	//give the currently observed color more weight
 		//v.color = (v0.weight * v0.color + v1.weight * v1.color)/(v0.weight + v1.weight);
 		//out.color = 0.5f * (v0.color + v1.color);	//exponential running average 
-		
+
 
 		float3 c0 = make_float3(v0.color.x, v0.color.y, v0.color.z);
 		float3 c1 = make_float3(v1.color.x, v1.color.y, v1.color.z);
@@ -241,9 +246,9 @@ struct HashData {
 		//float3 res = (c0 * (float)v0.weight + c1 * (float)v1.weight) / ((float)v0.weight + (float)v1.weight);
 		//float3 res = c1;
 
-		out.color.x = (uchar)(res.x+0.5f);	out.color.y = (uchar)(res.y+0.5f); out.color.z = (uchar)(res.z+0.5f);
-		
-		
+		out.color.x = (uchar)(res.x + 0.5f);	out.color.y = (uchar)(res.y + 0.5f); out.color.z = (uchar)(res.z + 0.5f);
+
+
 
 		out.sdf = (v0.sdf * (float)v0.weight + v1.sdf * (float)v1.weight) / ((float)v0.weight + (float)v1.weight);
 		out.weight = min(c_hashParams.m_integrationWeightMax, (unsigned int)v0.weight + (unsigned int)v1.weight);
@@ -251,83 +256,83 @@ struct HashData {
 
 
 	//! returns the truncation of the SDF for a given distance value
-	__device__ 
-	float getTruncation(float z) const {
+	__device__
+		float getTruncation(float z) const {
 		return c_hashParams.m_truncation + c_hashParams.m_truncScale * z;
 	}
 
 
-	__device__ 
-	float3 worldToVirtualVoxelPosFloat(const float3& pos) const	{
+	__device__
+		float3 worldToVirtualVoxelPosFloat(const float3& pos) const {
 		return pos / c_hashParams.m_virtualVoxelSize;
 	}
 
-	__device__ 
-	int3 worldToVirtualVoxelPos(const float3& pos) const {
+	__device__
+		int3 worldToVirtualVoxelPos(const float3& pos) const {
 		//const float3 p = pos*g_VirtualVoxelResolutionScalar;
 		const float3 p = pos / c_hashParams.m_virtualVoxelSize;
-		return make_int3(p+make_float3(sign(p))*0.5f);
+		return make_int3(p + make_float3(sign(p))*0.5f);
 	}
 
-	__device__ 
-	int3 virtualVoxelPosToSDFBlock(int3 virtualVoxelPos) const {
-		if (virtualVoxelPos.x < 0) virtualVoxelPos.x -= SDF_BLOCK_SIZE-1;
-		if (virtualVoxelPos.y < 0) virtualVoxelPos.y -= SDF_BLOCK_SIZE-1;
-		if (virtualVoxelPos.z < 0) virtualVoxelPos.z -= SDF_BLOCK_SIZE-1;
+	__device__
+		int3 virtualVoxelPosToSDFBlock(int3 virtualVoxelPos) const {
+		if (virtualVoxelPos.x < 0) virtualVoxelPos.x -= SDF_BLOCK_SIZE - 1;
+		if (virtualVoxelPos.y < 0) virtualVoxelPos.y -= SDF_BLOCK_SIZE - 1;
+		if (virtualVoxelPos.z < 0) virtualVoxelPos.z -= SDF_BLOCK_SIZE - 1;
 
 		return make_int3(
-			virtualVoxelPos.x/SDF_BLOCK_SIZE,
-			virtualVoxelPos.y/SDF_BLOCK_SIZE,
-			virtualVoxelPos.z/SDF_BLOCK_SIZE);
+			virtualVoxelPos.x / SDF_BLOCK_SIZE,
+			virtualVoxelPos.y / SDF_BLOCK_SIZE,
+			virtualVoxelPos.z / SDF_BLOCK_SIZE);
 	}
 
 	// Computes virtual voxel position of corner sample position
-	__device__ 
-	int3 SDFBlockToVirtualVoxelPos(const int3& sdfBlock) const	{
-		return sdfBlock*SDF_BLOCK_SIZE;
+	__device__
+		int3 SDFBlockToVirtualVoxelPos(const int3& sdfBlock) const {
+		return sdfBlock * SDF_BLOCK_SIZE;
 	}
 
-	__device__ 
-	float3 virtualVoxelPosToWorld(const int3& pos) const	{
+	__device__
+		float3 virtualVoxelPosToWorld(const int3& pos) const {
 		return make_float3(pos)*c_hashParams.m_virtualVoxelSize;
 	}
 
-	__device__ 
-	float3 SDFBlockToWorld(const int3& sdfBlock) const	{
+	__device__
+		float3 SDFBlockToWorld(const int3& sdfBlock) const {
 		return virtualVoxelPosToWorld(SDFBlockToVirtualVoxelPos(sdfBlock));
 	}
 
-	__device__ 
-	int3 worldToSDFBlock(const float3& worldPos) const	{
+	__device__
+		int3 worldToSDFBlock(const float3& worldPos) const {
 		return virtualVoxelPosToSDFBlock(worldToVirtualVoxelPos(worldPos));
 	}
 
 	__device__
-	bool isSDFBlockInCameraFrustumApprox(const int3& sdfBlock) {
+		bool isSDFBlockInCameraFrustumApprox(const int3& sdfBlock) {
 		float3 posWorld = virtualVoxelPosToWorld(SDFBlockToVirtualVoxelPos(sdfBlock)) + c_hashParams.m_virtualVoxelSize * 0.5f * (SDF_BLOCK_SIZE - 1.0f);
 		return DepthCameraData::isInCameraFrustumApprox(c_hashParams.m_rigidTransformInverse, posWorld);
 	}
 
 	//! computes the (local) virtual voxel pos of an index; idx in [0;511]
-	__device__ 
-	uint3 delinearizeVoxelIndex(uint idx) const	{
+	__device__
+		uint3 delinearizeVoxelIndex(uint idx) const {
 		uint x = idx % SDF_BLOCK_SIZE;
 		uint y = (idx % (SDF_BLOCK_SIZE * SDF_BLOCK_SIZE)) / SDF_BLOCK_SIZE;
-		uint z = idx / (SDF_BLOCK_SIZE * SDF_BLOCK_SIZE);	
-		return make_uint3(x,y,z);
+		uint z = idx / (SDF_BLOCK_SIZE * SDF_BLOCK_SIZE);
+		return make_uint3(x, y, z);
 	}
 
 	//! computes the linearized index of a local virtual voxel pos; pos in [0;7]^3
-	__device__ 
-	uint linearizeVoxelPos(const int3& virtualVoxelPos)	const {
-		return  
+	__device__
+		uint linearizeVoxelPos(const int3& virtualVoxelPos)	const {
+		return
 			virtualVoxelPos.z * SDF_BLOCK_SIZE * SDF_BLOCK_SIZE +
 			virtualVoxelPos.y * SDF_BLOCK_SIZE +
 			virtualVoxelPos.x;
 	}
 
-	__device__ 
-	int virtualVoxelPosToLocalSDFBlockIndex(const int3& virtualVoxelPos) const	{
+	__device__
+		int virtualVoxelPosToLocalSDFBlockIndex(const int3& virtualVoxelPos) const {
 		int3 localVoxelPos = make_int3(
 			virtualVoxelPos.x % SDF_BLOCK_SIZE,
 			virtualVoxelPos.y % SDF_BLOCK_SIZE,
@@ -340,79 +345,81 @@ struct HashData {
 		return linearizeVoxelPos(localVoxelPos);
 	}
 
-	__device__ 
-	int worldToLocalSDFBlockIndex(const float3& world) const	{
+	__device__
+		int worldToLocalSDFBlockIndex(const float3& world) const {
 		int3 virtualVoxelPos = worldToVirtualVoxelPos(world);
 		return virtualVoxelPosToLocalSDFBlockIndex(virtualVoxelPos);
 	}
 
 
-		//! returns the hash entry for a given worldPos; if there was no hash entry the returned entry will have a ptr with FREE_ENTRY set
-	__device__ 
-	HashEntry getHashEntry(const float3& worldPos) const	{
+	//! returns the hash entry for a given worldPos; if there was no hash entry the returned entry will have a ptr with FREE_ENTRY set
+	__device__
+		HashEntry getHashEntry(const float3& worldPos) const {
 		//int3 blockID = worldToSDFVirtualVoxelPos(worldPos)/SDF_BLOCK_SIZE;	//position of sdf block
 		int3 blockID = worldToSDFBlock(worldPos);
 		return getHashEntryForSDFBlockPos(blockID);
 	}
 
 
-	__device__ 
+	__device__
 		void deleteHashEntry(uint id) {
-			deleteHashEntry(d_hash[id]);
+		deleteHashEntry(d_hash[id]);
 	}
 
-	__device__ 
+	__device__
 		void deleteHashEntry(HashEntry& hashEntry) {
-			hashEntry.pos = make_int3(0);
-			hashEntry.offset = 0;
-			hashEntry.ptr = FREE_ENTRY;
+		hashEntry.pos = make_int3(0);
+		hashEntry.offset = 0;
+		hashEntry.ptr = FREE_ENTRY;
 	}
 
-	__device__ 
-		bool voxelExists(const float3& worldPos) const	{
-			HashEntry hashEntry = getHashEntry(worldPos);
-			return (hashEntry.ptr != FREE_ENTRY);
+	__device__
+		bool voxelExists(const float3& worldPos) const {
+		HashEntry hashEntry = getHashEntry(worldPos);
+		return (hashEntry.ptr != FREE_ENTRY);
 	}
 
-	__device__  
-	void deleteVoxel(Voxel& v) const {
-		v.color = make_uchar3(0,0,0);
+	__device__
+		void deleteVoxel(Voxel& v) const {
+		v.color = make_uchar3(0, 0, 0);
 		v.weight = 0;
 		v.sdf = 0.0f;
 	}
-	__device__ 
+	__device__
 		void deleteVoxel(uint id) {
-			deleteVoxel(d_SDFBlocks[id]);
+		deleteVoxel(d_SDFBlocks[id]);
 	}
 
 
-	__device__ 
-	Voxel getVoxel(const float3& worldPos) const	{
+	__device__
+		Voxel getVoxel(const float3& worldPos) const {
 		HashEntry hashEntry = getHashEntry(worldPos);
 		Voxel v;
 		if (hashEntry.ptr == FREE_ENTRY) {
-			deleteVoxel(v);			
-		} else {
+			deleteVoxel(v);
+		}
+		else {
 			int3 virtualVoxelPos = worldToVirtualVoxelPos(worldPos);
 			v = d_SDFBlocks[hashEntry.ptr + virtualVoxelPosToLocalSDFBlockIndex(virtualVoxelPos)];
 		}
 		return v;
 	}
 
-	__device__ 
-	Voxel getVoxel(const int3& virtualVoxelPos) const	{
+	__device__
+		Voxel getVoxel(const int3& virtualVoxelPos) const {
 		HashEntry hashEntry = getHashEntryForSDFBlockPos(virtualVoxelPosToSDFBlock(virtualVoxelPos));
 		Voxel v;
 		if (hashEntry.ptr == FREE_ENTRY) {
-			deleteVoxel(v);			
-		} else {
+			deleteVoxel(v);
+		}
+		else {
 			v = d_SDFBlocks[hashEntry.ptr + virtualVoxelPosToLocalSDFBlockIndex(virtualVoxelPos)];
 		}
 		return v;
 	}
-	
-	__device__ 
-	void setVoxel(const int3& virtualVoxelPos, Voxel& voxelInput) const {
+
+	__device__
+		void setVoxel(const int3& virtualVoxelPos, Voxel& voxelInput) const {
 		HashEntry hashEntry = getHashEntryForSDFBlockPos(virtualVoxelPosToSDFBlock(virtualVoxelPos));
 		if (hashEntry.ptr != FREE_ENTRY) {
 			d_SDFBlocks[hashEntry.ptr + virtualVoxelPosToLocalSDFBlockIndex(virtualVoxelPos)] = voxelInput;
@@ -420,8 +427,8 @@ struct HashData {
 	}
 
 	//! returns the hash entry for a given sdf block id; if there was no hash entry the returned entry will have a ptr with FREE_ENTRY set
-	__device__ 
-	HashEntry getHashEntryForSDFBlockPos(const int3& sdfBlock) const
+	__device__
+		HashEntry getHashEntryForSDFBlockPos(const int3& sdfBlock) const
 	{
 		uint h = computeHashPos(sdfBlock);			//hash bucket
 		uint hp = h * HASH_BUCKET_SIZE;	//hash position
@@ -440,14 +447,14 @@ struct HashData {
 		}
 
 #ifdef HANDLE_COLLISIONS
-		const uint idxLastEntryInBucket = (h+1)*HASH_BUCKET_SIZE - 1;
+		const uint idxLastEntryInBucket = (h + 1)*HASH_BUCKET_SIZE - 1;
 		int i = idxLastEntryInBucket;	//start with the last entry of the current bucket
 		HashEntry curr;
 		//traverse list until end: memorize idx at list end and memorize offset from last element of bucket to list end
 
 		unsigned int maxIter = 0;
 		uint g_MaxLoopIterCount = c_hashParams.m_hashMaxCollisionLinkedListSize;
-		#pragma unroll 1 
+#pragma unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {
 			curr = d_hash[i];
 
@@ -468,32 +475,32 @@ struct HashData {
 	}
 
 	//for histogram (no collision traversal)
-	__device__ 
-	unsigned int getNumHashEntriesPerBucket(unsigned int bucketID) {
+	__device__
+		unsigned int getNumHashEntriesPerBucket(unsigned int bucketID) {
 		unsigned int h = 0;
 		for (uint i = 0; i < HASH_BUCKET_SIZE; i++) {
-			if (d_hash[bucketID*HASH_BUCKET_SIZE+i].ptr != FREE_ENTRY) {
+			if (d_hash[bucketID*HASH_BUCKET_SIZE + i].ptr != FREE_ENTRY) {
 				h++;
 			}
-		} 
+		}
 		return h;
 	}
 
 	//for histogram (collisions traversal only)
-	__device__ 
-	unsigned int getNumHashLinkedList(unsigned int bucketID) {
+	__device__
+		unsigned int getNumHashLinkedList(unsigned int bucketID) {
 		unsigned int listLen = 0;
 
 #ifdef HANDLE_COLLISIONS
-		const uint idxLastEntryInBucket = (bucketID+1)*HASH_BUCKET_SIZE - 1;
+		const uint idxLastEntryInBucket = (bucketID + 1)*HASH_BUCKET_SIZE - 1;
 		unsigned int i = idxLastEntryInBucket;	//start with the last entry of the current bucket
-		//int offset = 0;
+												//int offset = 0;
 		HashEntry curr;	curr.offset = 0;
 		//traverse list until end: memorize idx at list end and memorize offset from last element of bucket to list end
 
 		unsigned int maxIter = 0;
 		uint g_MaxLoopIterCount = c_hashParams.m_hashMaxCollisionLinkedListSize;
-		#pragma unroll 1 
+#pragma unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {
 			//offset = curr.offset;
 			//curr = getHashEntry(g_Hash, i);
@@ -509,28 +516,28 @@ struct HashData {
 			maxIter++;
 		}
 #endif
-		
+
 		return listLen;
 	}
 
 
 
 	__device__
-	uint consumeHeap() {
+		uint consumeHeap() {
 		uint addr = atomicSub(&d_heapCounter[0], 1);
 		//TODO MATTHIAS check some error handling?
 		return d_heap[addr];
 	}
 	__device__
-	void appendHeap(uint ptr) {
+		void appendHeap(uint ptr) {
 		uint addr = atomicAdd(&d_heapCounter[0], 1);
 		//TODO MATTHIAS check some error handling?
-		d_heap[addr+1] = ptr;
+		d_heap[addr + 1] = ptr;
 	}
 
 	//pos in SDF block coordinates
 	__device__
-	void allocBlock(const int3& pos) {
+		void allocBlock(const int3& pos) {
 
 
 		uint h = computeHashPos(pos);				//hash bucket
@@ -538,7 +545,7 @@ struct HashData {
 
 		int firstEmpty = -1;
 		for (uint j = 0; j < HASH_BUCKET_SIZE; j++) {
-			uint i = j + hp;		
+			uint i = j + hp;
 			const HashEntry& curr = d_hash[i];
 
 			//in that case the SDF-block is already allocated and corresponds to the current position -> exit thread
@@ -555,16 +562,16 @@ struct HashData {
 
 #ifdef HANDLE_COLLISIONS
 		//updated variables as after the loop
-		const uint idxLastEntryInBucket = (h+1)*HASH_BUCKET_SIZE - 1;	//get last index of bucket
+		const uint idxLastEntryInBucket = (h + 1)*HASH_BUCKET_SIZE - 1;	//get last index of bucket
 		uint i = idxLastEntryInBucket;											//start with the last entry of the current bucket
-		//int offset = 0;
+																				//int offset = 0;
 		HashEntry curr;	curr.offset = 0;
 		//traverse list until end: memorize idx at list end and memorize offset from last element of bucket to list end
 		//int k = 0;
 
 		unsigned int maxIter = 0;
 		uint g_MaxLoopIterCount = c_hashParams.m_hashMaxCollisionLinkedListSize;
-		#pragma  unroll 1 
+#pragma  unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {
 			//offset = curr.offset;
 			curr = d_hash[i];	//TODO MATTHIAS do by reference
@@ -582,13 +589,13 @@ struct HashData {
 #endif
 
 		if (firstEmpty != -1) {	//if there is an empty entry and we haven't allocated the current entry before
-			//int prevValue = 0;
-			//InterlockedExchange(d_hashBucketMutex[h], LOCK_ENTRY, prevValue);	//lock the hash bucket
+								//int prevValue = 0;
+								//InterlockedExchange(d_hashBucketMutex[h], LOCK_ENTRY, prevValue);	//lock the hash bucket
 			int prevValue = atomicExch(&d_hashBucketMutex[h], LOCK_ENTRY);
 			if (prevValue != LOCK_ENTRY) {	//only proceed if the bucket has been locked
 				HashEntry& entry = d_hash[firstEmpty];
 				entry.pos = pos;
-				entry.offset = NO_OFFSET;		
+				entry.offset = NO_OFFSET;
 				entry.ptr = consumeHeap() * SDF_BLOCK_SIZE*SDF_BLOCK_SIZE*SDF_BLOCK_SIZE;	//memory alloc
 			}
 			return;
@@ -600,7 +607,7 @@ struct HashData {
 		//linear search for free entry
 
 		maxIter = 0;
-		#pragma  unroll 1 
+#pragma  unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {
 			offset++;
 			i = (idxLastEntryInBucket + offset) % (HASH_BUCKET_SIZE * c_hashParams.m_hashNumBuckets);	//go to next hash element
@@ -610,8 +617,8 @@ struct HashData {
 			//	return;
 			//} 
 			if (curr.ptr == FREE_ENTRY) {	//this is the first free entry
-				//int prevValue = 0;
-				//InterlockedExchange(g_HashBucketMutex[h], LOCK_ENTRY, prevValue);	//lock the original hash bucket
+											//int prevValue = 0;
+											//InterlockedExchange(g_HashBucketMutex[h], LOCK_ENTRY, prevValue);	//lock the original hash bucket
 				int prevValue = atomicExch(&d_hashBucketMutex[h], LOCK_ENTRY);
 				if (prevValue != LOCK_ENTRY) {
 					HashEntry lastEntryInBucket = d_hash[idxLastEntryInBucket];
@@ -621,32 +628,32 @@ struct HashData {
 					if (prevValue != LOCK_ENTRY) {	//only proceed if the bucket has been locked
 						HashEntry& entry = d_hash[i];
 						entry.pos = pos;
-						entry.offset = lastEntryInBucket.offset;		
+						entry.offset = lastEntryInBucket.offset;
 						entry.ptr = consumeHeap() * SDF_BLOCK_SIZE*SDF_BLOCK_SIZE*SDF_BLOCK_SIZE;	//memory alloc
 
 						lastEntryInBucket.offset = offset;
 						d_hash[idxLastEntryInBucket] = lastEntryInBucket;
 						//setHashEntry(g_Hash, idxLastEntryInBucket, lastEntryInBucket);
 					}
-				} 
+				}
 				return;	//bucket was already locked
 			}
 
 			maxIter++;
-		} 
+		}
 #endif
 	}
 
-	
+
 	//!inserts a hash entry without allocating any memory: used by streaming: TODO MATTHIAS check the atomics in this function
 	__device__
-	bool insertHashEntry(HashEntry entry)
+		bool insertHashEntry(HashEntry entry)
 	{
 		uint h = computeHashPos(entry.pos);
 		uint hp = h * HASH_BUCKET_SIZE;
 
 		for (uint j = 0; j < HASH_BUCKET_SIZE; j++) {
-			uint i = j + hp;		
+			uint i = j + hp;
 			//const HashEntry& curr = d_hash[i];
 			int prevWeight = 0;
 			//InterlockedCompareExchange(hash[3*i+2], FREE_ENTRY, LOCK_ENTRY, prevWeight);
@@ -660,7 +667,7 @@ struct HashData {
 
 #ifdef HANDLE_COLLISIONS
 		//updated variables as after the loop
-		const uint idxLastEntryInBucket = (h+1)*HASH_BUCKET_SIZE - 1;	//get last index of bucket
+		const uint idxLastEntryInBucket = (h + 1)*HASH_BUCKET_SIZE - 1;	//get last index of bucket
 
 		uint i = idxLastEntryInBucket;											//start with the last entry of the current bucket
 		HashEntry curr;
@@ -668,9 +675,9 @@ struct HashData {
 		unsigned int maxIter = 0;
 		//[allow_uav_condition]
 		uint g_MaxLoopIterCount = c_hashParams.m_hashMaxCollisionLinkedListSize;
-		#pragma  unroll 1 
+#pragma  unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {									//traverse list until end // why find the end? we you are inserting at the start !!!
-			//curr = getHashEntry(hash, i);
+																				//curr = getHashEntry(hash, i);
 			curr = d_hash[i];	//TODO MATTHIAS do by reference
 			if (curr.offset == 0) break;									//we have found the end of the list
 			i = idxLastEntryInBucket + curr.offset;							//go to next element in the list
@@ -681,7 +688,7 @@ struct HashData {
 
 		maxIter = 0;
 		int offset = 0;
-		#pragma  unroll 1 
+#pragma  unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {													//linear search for free entry
 			offset++;
 			uint i = (idxLastEntryInBucket + offset) % (HASH_BUCKET_SIZE * c_hashParams.m_hashNumBuckets);	//go to next hash element
@@ -690,10 +697,10 @@ struct HashData {
 			int prevWeight = 0;
 			//InterlockedCompareExchange(hash[3*i+2], FREE_ENTRY, LOCK_ENTRY, prevWeight);		//check for a free entry
 			uint* d_hashUI = (uint*)d_hash;
-			prevWeight = prevWeight = atomicCAS(&d_hashUI[3*idxLastEntryInBucket+1], (uint)FREE_ENTRY, (uint)LOCK_ENTRY);
+			prevWeight = prevWeight = atomicCAS(&d_hashUI[3 * idxLastEntryInBucket + 1], (uint)FREE_ENTRY, (uint)LOCK_ENTRY);
 			if (prevWeight == FREE_ENTRY) {														//if free entry found set prev->next = curr & curr->next = prev->next
-				//[allow_uav_condition]
-				//while(hash[3*idxLastEntryInBucket+2] == LOCK_ENTRY); // expects setHashEntry to set the ptr last, required because pos.z is packed into the same value -> prev->next = curr -> might corrput pos.z
+																								//[allow_uav_condition]
+																								//while(hash[3*idxLastEntryInBucket+2] == LOCK_ENTRY); // expects setHashEntry to set the ptr last, required because pos.z is packed into the same value -> prev->next = curr -> might corrput pos.z
 
 				HashEntry lastEntryInBucket = d_hash[idxLastEntryInBucket];			//get prev (= lastEntry in Bucket)
 
@@ -701,16 +708,16 @@ struct HashData {
 				int oldOffsetPrev = 0;
 				//InterlockedExchange(hash[3*idxLastEntryInBucket+1], newOffsetPrev, oldOffsetPrev);	//set prev offset atomically
 				uint* d_hashUI = (uint*)d_hash;
-				oldOffsetPrev = prevWeight = atomicExch(&d_hashUI[3*idxLastEntryInBucket+1], newOffsetPrev);
+				oldOffsetPrev = prevWeight = atomicExch(&d_hashUI[3 * idxLastEntryInBucket + 1], newOffsetPrev);
 				entry.offset = oldOffsetPrev >> 16;													//remove prev z-pos from old offset
 
-				//setHashEntry(hash, i, entry);														//sets the current hashEntry with: curr->next = prev->next
+																									//setHashEntry(hash, i, entry);														//sets the current hashEntry with: curr->next = prev->next
 				d_hash[i] = entry;
 				return true;
 			}
 
 			maxIter++;
-		} 
+		}
 #endif
 
 		return false;
@@ -720,7 +727,7 @@ struct HashData {
 
 	//! deletes a hash entry position for a given sdfBlock index (returns true uppon successful deletion; otherwise returns false)
 	__device__
-	bool deleteHashEntryElement(const int3& sdfBlock) {
+		bool deleteHashEntryElement(const int3& sdfBlock) {
 		uint h = computeHashPos(sdfBlock);	//hash bucket
 		uint hp = h * HASH_BUCKET_SIZE;		//hash position
 
@@ -737,8 +744,8 @@ struct HashData {
 #endif
 #ifdef HANDLE_COLLISIONS
 				if (curr.offset != 0) {	//if there was a pointer set it to the next list element
-					//int prevValue = 0;
-					//InterlockedExchange(bucketMutex[h], LOCK_ENTRY, prevValue);	//lock the hash bucket
+										//int prevValue = 0;
+										//InterlockedExchange(bucketMutex[h], LOCK_ENTRY, prevValue);	//lock the hash bucket
 					int prevValue = atomicExch(&d_hashBucketMutex[h], LOCK_ENTRY);
 					if (prevValue == LOCK_ENTRY)	return false;
 					if (prevValue != LOCK_ENTRY) {
@@ -751,7 +758,8 @@ struct HashData {
 						deleteHashEntry(nextIdx);
 						return true;
 					}
-				} else {
+				}
+				else {
 					const uint linBlockSize = SDF_BLOCK_SIZE * SDF_BLOCK_SIZE * SDF_BLOCK_SIZE;
 					appendHeap(curr.ptr / linBlockSize);
 					//heapAppend.Append(curr.ptr / linBlockSize);
@@ -760,9 +768,9 @@ struct HashData {
 				}
 #endif	//HANDLE_COLLSISION
 			}
-		}	
+		}
 #ifdef HANDLE_COLLISIONS
-		const uint idxLastEntryInBucket = (h+1)*HASH_BUCKET_SIZE - 1;
+		const uint idxLastEntryInBucket = (h + 1)*HASH_BUCKET_SIZE - 1;
 		int i = idxLastEntryInBucket;
 		HashEntry curr;
 		curr = d_hash[i];
@@ -773,7 +781,7 @@ struct HashData {
 		unsigned int maxIter = 0;
 		uint g_MaxLoopIterCount = c_hashParams.m_hashMaxCollisionLinkedListSize;
 
-		#pragma  unroll 1 
+#pragma  unroll 1 
 		while (maxIter < g_MaxLoopIterCount) {
 			curr = d_hash[i];
 			//found that dude that we need/want to delete
@@ -787,7 +795,7 @@ struct HashData {
 					appendHeap(curr.ptr / linBlockSize);
 					//heapAppend.Append(curr.ptr / linBlockSize);
 					deleteHashEntry(i);
-					HashEntry prev = d_hash[prevIdx];				
+					HashEntry prev = d_hash[prevIdx];
 					prev.offset = curr.offset;
 					//setHashEntry(hash, prevIdx, prev);
 					d_hash[prevIdx] = prev;
@@ -821,4 +829,5 @@ struct HashData {
 	int*		d_hashBucketMutex;			//binary flag per hash bucket; used for allocation to atomically lock a bucket
 
 	bool		m_bIsOnGPU;					//the class be be used on both cpu and gpu
+
 };

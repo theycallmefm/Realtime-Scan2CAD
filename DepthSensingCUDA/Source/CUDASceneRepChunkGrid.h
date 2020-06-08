@@ -478,6 +478,7 @@ public:
 			if (m_grid[i]) numOccupiedChunks++;
 		}
 		outStream << numOccupiedChunks;
+		std::cout << "\n numOccupiedChunks: " << numOccupiedChunks << std::endl;
 
 		for (unsigned int i = 0; i < m_grid.size(); i++) {
 			ChunkDesc* desc = m_grid[i];

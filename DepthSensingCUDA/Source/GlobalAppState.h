@@ -143,12 +143,13 @@ public:
 		m_bIsInitialized = true;
 	}
 
-	void print() const {
+	//TODO: this is not working when including pytorch
+	/*void print() const {
 #define X(type, name) \
 	std::cout << #name " = " << name << std::endl;
 		X_GLOBAL_APP_STATE_FIELDS
 #undef X
-	}
+	}*/
 
 	static GlobalAppState& getInstance() {
 		static GlobalAppState s;
