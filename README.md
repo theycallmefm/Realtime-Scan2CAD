@@ -22,7 +22,7 @@ This method is an online system for large and fine scale volumetric reconstructi
 ## Method
 The network has been trained using hashgrid data generated from VoxelHashing. Afterwards each module has been saved using torch's jit library(you can access my modules in \checkpoint folder but you can also train your own network and use it in this system) It uses libtorch to load modules. It takes the TSDF in camera view frustrum and aligns loaded CAD models according to the modules. You can look at the main structure below(Sorry for bad drawing...)
 
-<img src="https://github.com/theycallmefm/VoxelHashing/blob/master/DepthSensingCUDA/proj-images/method.PNG" width="640" height="480" />
+<img src="https://github.com/theycallmefm/VoxelHashing/blob/master/DepthSensingCUDA/proj-images/method.PNG" width="900" height="480" />
 
 
 **Some notes:** 
