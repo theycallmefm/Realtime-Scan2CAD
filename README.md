@@ -1,9 +1,9 @@
 # Real-time Scan2CAD Implementation using VoxelHashing
-![alt text](<proj-images/scene0470_chairs.gif> = 300x300)
 
+<img src="https://github.com/theycallmefm/VoxelHashing/blob/master/DepthSensingCUDA/proj-images/scene0470_chairs.gif" width="640" height="480" />
 This project aligns a set of CAD models to the underlying scan in real-time using depth data. It uses two key approaches:
 
-#### End-to-End CAD Model Retrieval and 9DoF Alignment
+### End-to-End CAD Model Retrieval and 9DoF Alignment
 
 This method takes a 3D scan and a set of CAD models as input and predicts a 9DoF pose that aligns each model to the underlying scan. End-to-End method is improvement upon Scan2CAD since it works in global fashion and allows for single forward pass.
 
@@ -11,7 +11,7 @@ This method takes a 3D scan and a set of CAD models as input and predicts a 9DoF
 
 **Code(Scan2CAD):** [https://github.com/skanti/Scan2CAD](https://github.com/skanti/Scan2CAD)
 
-#### VoxelHashing
+### VoxelHashing
 
 This method is an online system for large and fine scale volumetric reconstruction based on a memory and speed efficient data structure. It has improved performance and reconstruction quality against other commonly known 3D reconstruction methods. 
 
@@ -22,7 +22,7 @@ This method is an online system for large and fine scale volumetric reconstructi
 ## Method
 The network has been trained using hashgrid data generated from VoxelHashing. Afterwards each module has been saved using torch's jit library(you can access my modules in \checkpoint folder but you can also train your own network and use it in this system) It uses libtorch to load modules. It takes the TSDF in camera view frustrum and aligns loaded CAD models according to the modules. You can look at the main structure below(Sorry for bad drawing...)
 
-![alt text](https://github.com/[username]/[reponame]/blob/[branch]/image.jpg?raw=true)
+<img src="https://github.com/theycallmefm/VoxelHashing/blob/master/DepthSensingCUDA/proj-images/method.PNG" width="640" height="480" />
 
 
 **Some notes:** 
