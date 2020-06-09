@@ -1,1 +1,0 @@
-x64\Release\DepthSensing zParametersLow.txt zParametersTrackingDefault.txt

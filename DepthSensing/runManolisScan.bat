@@ -1,1 +1,0 @@
-x64\Release\DepthSensing zParametersManolisScan.txt zParametersTrackingDefault.txt

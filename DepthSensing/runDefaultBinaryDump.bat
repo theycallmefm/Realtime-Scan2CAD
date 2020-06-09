@@ -1,1 +1,0 @@
-x64\Release\DepthSensing zParametersCSDZFile.txt zParametersTrackingDefault.txt
